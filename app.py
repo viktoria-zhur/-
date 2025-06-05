@@ -3,9 +3,18 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.cluster import KMeans
+import plotly.express as px
 import io
 
-# Функция загрузки данных с обработкой загружаемого файла
+# Настройка страницы
+st.set_page_config(
+    page_title="Анализ удовлетворенности пассажиров",
+    page_icon="✈️",
+    layout="wide"
+)
+
+# Кэшируемые функции
+@st.cache_data
 def load_data_from_csv(uploaded_file):
     try:
         data = pd.read_csv(uploaded_file)
@@ -14,120 +23,110 @@ def load_data_from_csv(uploaded_file):
         st.error(f"Ошибка загрузки файла: {e}")
         return None
 
-def show_initial_distribution(data):
-    if 'satisfaction_score' not in data.columns:
-        st.error("В данных отсутствует столбец 'satisfaction_score'")
-        return
-        
-    fig, ax = plt.subplots(figsize=(8, 5))
-    data['satisfaction_score'].hist(bins=20, color='skyblue', ax=ax)
-    ax.set_title('Распределение satisfaction_score (исходные данные)', fontsize=14)
-    ax.set_xlabel('Уровень удовлетворенности', fontsize=12)
-    ax.set_ylabel('Количество пассажиров', fontsize=12)
-    plt.tight_layout()
-    st.pyplot(fig)
-
+@st.cache_data
 def clean_data(data):
-    if data is None:
+    if data is None or data.empty:
         return None
 
     # Удаление пропущенных значений
     data_clean = data.dropna()
 
-    # Проверка наличия столбца satisfaction_score
-    if 'satisfaction_score' not in data_clean.columns:
-        st.error("В данных отсутствует столбец 'satisfaction_score'")
+    # Проверка обязательных столбцов
+    required_columns = {'satisfaction_score', 'flight_id'}
+    if not required_columns.issubset(data_clean.columns):
+        missing = required_columns - set(data_clean.columns)
+        st.error(f"Отсутствуют обязательные столбцы: {', '.join(missing)}")
         return None
         
-    # Удаление аномальных значений
+    # Фильтрация аномальных значений
     data_clean = data_clean[
         (data_clean['satisfaction_score'] >= 1) &
         (data_clean['satisfaction_score'] <= 5)
-    ]
+    ].copy()
+    
     return data_clean
 
-def show_cleaned_distribution(data_clean):
-    if data_clean is None or 'satisfaction_score' not in data_clean.columns:
-        return
-        
-    fig, ax = plt.subplots(figsize=(8, 5))
-    data_clean['satisfaction_score'].hist(bins=20, color='orange', ax=ax)
-    ax.set_title('Распределение после очистки', fontsize=14)
-    ax.set_xlabel('Уровень удовлетворенности', fontsize=12)
-    ax.set_ylabel('Количество пассажиров', fontsize=12)
-    plt.tight_layout()
-    st.pyplot(fig)
+# Функции визуализации
+def show_distribution(data, title, color='skyblue'):
+    try:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        data['satisfaction_score'].hist(bins=20, color=color, ax=ax)
+        ax.set_title(title, fontsize=14)
+        ax.set_xlabel('Уровень удовлетворенности', fontsize=12)
+        ax.set_ylabel('Количество пассажиров', fontsize=12)
+        plt.tight_layout()
+        st.pyplot(fig)
+        plt.close()
+    except Exception as e:
+        st.error(f"Ошибка построения графика: {str(e)}")
 
-def perform_regression_analysis(X, y):
-    model = LinearRegression()
-    model.fit(X, y)
+def plot_regression(X, y, feature_name):
+    try:
+        model = LinearRegression()
+        model.fit(X, y)
 
-    if X.shape[1] == 1:
         fig, ax = plt.subplots(figsize=(8, 5))
         ax.scatter(X, y, color='blue', alpha=0.5, label='Данные')
         ax.plot(X, model.predict(X), color='red', linewidth=2, label='Линия регрессии')
-        ax.set_title(f'Зависимость удовлетворенности от {X.columns[0]}', fontsize=14)
-        ax.set_xlabel(X.columns[0], fontsize=12)
+        ax.set_title(f'Зависимость удовлетворенности от {feature_name}', fontsize=14)
+        ax.set_xlabel(feature_name, fontsize=12)
         ax.set_ylabel('Уровень удовлетворенности', fontsize=12)
         ax.legend()
         plt.tight_layout()
         st.pyplot(fig)
-
-    return model.coef_
-
-def perform_clustering(data, n_clusters=3):
-    kmeans = KMeans(n_clusters=n_clusters, random_state=42)
-    clusters = kmeans.fit_predict(data)
-
-    if data.shape[1] >= 2:
-        fig, ax = plt.subplots(figsize=(8, 6))
-        scatter = ax.scatter(
-            data.iloc[:, 0],
-            data.iloc[:, 1],
-            c=clusters,
-            cmap='viridis',
-            alpha=0.6,
-            s=50
-        )
-        ax.set_title(f'Кластеризация по {data.columns[0]} и {data.columns[1]}', fontsize=14)
-        ax.set_xlabel(data.columns[0], fontsize=12)
-        ax.set_ylabel(data.columns[1], fontsize=12)
-        plt.colorbar(scatter, label='Кластер')
-        plt.tight_layout()
-        st.pyplot(fig)
-
-    return clusters
-
-def generate_report(data):
-    if 'flight_id' not in data.columns or 'satisfaction_score' not in data.columns:
-        st.error("Для отчета необходимы столбцы 'flight_id' и 'satisfaction_score'")
-        return None
+        plt.close()
         
-    report = data.groupby('flight_id')['satisfaction_score'].agg(['mean', 'count', 'std'])
-    report.columns = ['Средняя удовлетворенность', 'Количество пассажиров', 'Стандартное отклонение']
+        return model.coef_
+    except Exception as e:
+        st.error(f"Ошибка регрессионного анализа: {str(e)}")
+        return None
 
-    fig, ax = plt.subplots(figsize=(12, 6))
-    report['Средняя удовлетворенность'].sort_values().plot(
-        kind='barh',
-        color='purple',
-        ax=ax,
-        xerr=report['Стандартное отклонение']
-    )
-    ax.set_title('Средний уровень удовлетворенности по рейсам', fontsize=14)
-    ax.set_xlabel('Уровень удовлетворенности', fontsize=12)
-    ax.set_ylabel('Номер рейса', fontsize=12)
-    plt.tight_layout()
-    st.pyplot(fig)
+def plot_clusters(data, n_clusters=3):
+    try:
+        kmeans = KMeans(n_clusters=n_clusters, random_state=42)
+        clusters = kmeans.fit_predict(data)
 
-    return report
+        fig = px.scatter(
+            data, 
+            x=data.columns[0], 
+            y=data.columns[1],
+            color=clusters,
+            title=f'Кластеризация (k={n_clusters})',
+            labels={'color': 'Кластер'},
+            opacity=0.7
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        return clusters
+    except Exception as e:
+        st.error(f"Ошибка кластеризации: {str(e)}")
+        return None
 
+def generate_flight_report(data):
+    try:
+        report = data.groupby('flight_id')['satisfaction_score'].agg(['mean', 'count', 'std'])
+        report.columns = ['Средняя удовлетворенность', 'Количество пассажиров', 'Стандартное отклонение']
+        report = report.sort_values('Средняя удовлетворенность', ascending=False)
+
+        fig = px.bar(
+            report,
+            x='Средняя удовлетворенность',
+            y=report.index,
+            orientation='h',
+            error_x='Стандартное отклонение',
+            title='Средний уровень удовлетворенности по рейсам',
+            color='Количество пассажиров',
+            color_continuous_scale='Purples'
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+        return report
+    except Exception as e:
+        st.error(f"Ошибка генерации отчета: {str(e)}")
+        return None
+
+# Основной интерфейс
 def main():
-    st.set_page_config(
-        page_title="Анализ удовлетворенности пассажиров",
-        page_icon="✈️",
-        layout="wide"
-    )
-
     st.title("✈️ Анализ удовлетворенности пассажиров")
     st.markdown("""
     <style>
@@ -135,7 +134,7 @@ def main():
     </style>
     """, unsafe_allow_html=True)
 
-    # Загрузка файла
+    # Загрузка данных
     uploaded_file = st.file_uploader(
         "Загрузите CSV-файл с данными",
         type=["csv"],
@@ -159,21 +158,20 @@ def main():
 
         if analysis_option == "Обзор данных":
             st.header("🔍 Обзор данных")
-            show_initial_distribution(data)
-
+            show_distribution(data, 'Распределение satisfaction_score (исходные данные)')
+            
             with st.expander("Подробная статистика"):
                 st.dataframe(data.describe().T.style.background_gradient(cmap='Blues'))
 
         elif analysis_option == "Очистка данных":
             st.header("🧹 Очистка данных")
-
+            
             if 'clean_data' not in st.session_state:
                 st.session_state['clean_data'] = clean_data(data)
 
             clean_data_df = st.session_state['clean_data']
             
             if clean_data_df is None:
-                st.error("Не удалось очистить данные. Проверьте наличие необходимых столбцов.")
                 return
 
             col1, col2 = st.columns(2)
@@ -187,31 +185,22 @@ def main():
                 st.write("- Пропущенные значения (NaN)")
                 st.write("- Аномальные значения satisfaction_score (вне диапазона 1-5)")
 
-            show_cleaned_distribution(clean_data_df)
+            show_distribution(clean_data_df, 'Распределение после очистки', 'orange')
 
         elif analysis_option == "Регрессионный анализ":
             st.header("📈 Регрессионный анализ")
 
-            if 'clean_data' not in st.session_state:
+            if 'clean_data' not in st.session_state or st.session_state['clean_data'] is None:
                 st.warning("Сначала выполните очистку данных!")
-                st.stop()
+                return
 
             clean_data_df = st.session_state['clean_data']
-            
-            if clean_data_df is None:
-                st.error("Данные не были очищены. Проверьте наличие ошибок на этапе очистки.")
-                return
-                
-            if 'satisfaction_score' not in clean_data_df.columns:
-                st.error("В данных отсутствует столбец 'satisfaction_score'")
-                return
-
             numeric_cols = clean_data_df.select_dtypes(include=['number']).columns.tolist()
             numeric_cols = [col for col in numeric_cols if col != 'satisfaction_score']
 
             if not numeric_cols:
                 st.error("В данных нет числовых признаков для анализа!")
-                st.stop()
+                return
 
             selected_feature = st.selectbox(
                 "Выберите признак для анализа:",
@@ -219,52 +208,45 @@ def main():
                 index=0
             )
 
-            coef = perform_regression_analysis(
+            coef = plot_regression(
                 clean_data_df[[selected_feature]],
-                clean_data_df['satisfaction_score']
+                clean_data_df['satisfaction_score'],
+                selected_feature
             )
 
-            st.info(f"""
-            **Коэффициент регрессии:** `{coef[0]:.4f}`
+            if coef is not None:
+                st.info(f"""
+                **Коэффициент регрессии:** `{coef[0]:.4f}`
 
-            **Интерпретация:**
-            - Положительное значение означает, что с ростом '{selected_feature}' растет удовлетворенность
-            - Отрицательное значение означает обратную зависимость
-            """)
+                **Интерпретация:**
+                - Положительное значение означает, что с ростом '{selected_feature}' растет удовлетворенность
+                - Отрицательное значение означает обратную зависимость
+                """)
 
         elif analysis_option == "Кластеризация":
             st.header("🧩 Кластеризация пассажиров")
 
-            if 'clean_data' not in st.session_state:
+            if 'clean_data' not in st.session_state or st.session_state['clean_data'] is None:
                 st.warning("Сначала выполните очистку данных!")
-                st.stop()
-
-            clean_data_df = st.session_state['clean_data']
-            
-            if clean_data_df is None:
-                st.error("Данные не были очищены. Проверьте наличие ошибок на этапе очистки.")
                 return
 
+            clean_data_df = st.session_state['clean_data']
             numeric_cols = clean_data_df.select_dtypes(include=['number']).columns.tolist()
 
             if len(numeric_cols) < 2:
                 st.error("Для кластеризации нужно как минимум 2 числовых признака!")
-                st.stop()
+                return
 
             col1, col2, col3 = st.columns(3)
-
             with col1:
                 feature1 = st.selectbox("Первый признак", numeric_cols, index=0)
-
             with col2:
-                default_idx = 1 if len(numeric_cols) > 1 else 0
-                feature2 = st.selectbox("Второй признак", numeric_cols, index=default_idx)
-
+                feature2 = st.selectbox("Второй признак", numeric_cols, index=min(1, len(numeric_cols)-1))
             with col3:
                 n_clusters = st.slider("Количество кластеров", 2, 10, 3)
 
             if st.button("Выполнить кластеризацию"):
-                clusters = perform_clustering(
+                clusters = plot_clusters(
                     clean_data_df[[feature1, feature2]],
                     n_clusters
                 )
@@ -272,40 +254,30 @@ def main():
                 if clusters is not None:
                     st.session_state['clusters'] = clusters
                     st.success(f"Пассажиры успешно разделены на {n_clusters} кластера!")
-
-                    cluster_stats = pd.Series(clusters).value_counts().sort_index()
-                    st.dataframe(cluster_stats.rename("Количество в кластере"))
+                    st.dataframe(pd.Series(clusters).value_counts().rename("Количество в кластере"))
 
         elif analysis_option == "Отчет по рейсам":
             st.header("📊 Отчет по рейсам")
 
-            if 'clean_data' not in st.session_state:
+            if 'clean_data' not in st.session_state or st.session_state['clean_data'] is None:
                 st.warning("Сначала выполните очистку данных!")
-                st.stop()
+                return
 
             clean_data_df = st.session_state['clean_data']
+            report = generate_flight_report(clean_data_df)
             
-            if clean_data_df is None:
-                st.error("Данные не были очищены. Проверьте наличие ошибок на этапе очистки.")
-                return
+            if report is not None:
+                st.dataframe(
+                    report.style.background_gradient(cmap='Purples', subset=['Средняя удовлетворенность'])
+                )
 
-            report = generate_report(clean_data_df)
-            
-            if report is None:
-                return
-
-            st.dataframe(
-                report.sort_values('Средняя удовлетворенность', ascending=False)
-                .style.background_gradient(cmap='Purples', subset=['Средняя удовлетворенность'])
-            )
-
-            csv = report.to_csv().encode('utf-8')
-            st.download_button(
-                label="📥 Скачать отчет в CSV",
-                data=csv,
-                file_name='flight_satisfaction_report.csv',
-                mime='text/csv'
-            )
+                csv = report.to_csv().encode('utf-8')
+                st.download_button(
+                    label="📥 Скачать отчет в CSV",
+                    data=csv,
+                    file_name='flight_satisfaction_report.csv',
+                    mime='text/csv'
+                )
 
 if __name__ == "__main__":
     main()
