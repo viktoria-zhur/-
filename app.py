@@ -1,12 +1,12 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import numpy as np
+import seaborn as sns
 
 def safe_load_data(uploaded_file):
-    """Безопасная загрузка данных с обработкой всех возможных ошибок"""
+    """Безопасная загрузка данных из Excel"""
     try:
-        data = pd.read_csv(uploaded_file)
+        data = pd.read_excel(uploaded_file)
         if data.empty:
             st.error("Файл не содержит данных")
             return None
@@ -15,71 +15,119 @@ def safe_load_data(uploaded_file):
         st.error(f"Ошибка загрузки файла: {str(e)}")
         return None
 
-def find_suitable_columns(data):
-    """Автоматический поиск подходящих столбцов для анализа"""
-    # 1. Попробуем найти столбцы с похожими названиями
-    possible_score_columns = [col for col in data.columns 
-                           if 'score' in col.lower() or 'satisfaction' in col.lower()]
+def analyze_satisfaction(data):
+    """Анализ удовлетворенности клиентов"""
+    st.header("Анализ удовлетворенности клиентов")
     
-    # 2. Ищем числовые столбцы
-    numeric_cols = data.select_dtypes(include=[np.number]).columns.tolist()
+    # Распределение satisfaction
+    fig, ax = plt.subplots(figsize=(8, 5))
+    data['satisfaction'].value_counts().plot(kind='bar', color=['#ff9999','#66b3ff'])
+    plt.title("Распределение удовлетворенности клиентов")
+    plt.xlabel("Удовлетворенность")
+    plt.ylabel("Количество")
+    plt.xticks(rotation=45)
+    st.pyplot(fig)
+    plt.close()
     
-    # 3. Ищем столбцы с подходящими значениями (диапазон 1-5 или 1-10)
-    suitable_cols = []
-    for col in data.columns:
-        try:
-            unique_vals = pd.to_numeric(data[col].dropna()).unique()
-            if all(1 <= x <= 10 for x in unique_vals):
-                suitable_cols.append(col)
-        except:
-            continue
+    # Влияние факторов на удовлетворенность
+    service_columns = [
+        'Inflight wifi service',
+        'Departure/Arrival time convenient',
+        'Ease of Online booking',
+        'Gate location',
+        'Food and drink',
+        'Online boarding',
+        'Seat comfort',
+        'Inflight entertainment',
+        'On-board service',
+        'Leg room service',
+        'Baggage handling',
+        'Checkin service',
+        'Inflight service',
+        'Cleanliness'
+    ]
     
-    return {
-        'possible_scores': possible_score_columns,
-        'numeric_cols': numeric_cols,
-        'suitable_cols': suitable_cols
-    }
+    st.subheader("Средние оценки по сервисам в зависимости от удовлетворенности")
+    mean_ratings = data.groupby('satisfaction')[service_columns].mean().T
+    fig, ax = plt.subplots(figsize=(12, 8))
+    mean_ratings.plot(kind='bar', ax=ax, color=['#ff9999','#66b3ff'])
+    plt.title("Средние оценки сервисов")
+    plt.xlabel("Категория сервиса")
+    plt.ylabel("Средняя оценка")
+    plt.xticks(rotation=45)
+    plt.legend(title="Удовлетворенность")
+    plt.tight_layout()
+    st.pyplot(fig)
+    plt.close()
 
-def smart_plot(data, column_name):
-    """Умное построение графика с автоматической настройкой"""
-    try:
-        fig, ax = plt.subplots(figsize=(10, 6))
-        
-        # Автоматическое определение типа графика
-        if data[column_name].nunique() > 10:
-            data[column_name].hist(bins=20, ax=ax, color='#1f77b4')
-            ax.set_ylabel('Частота')
-        else:
-            value_counts = data[column_name].value_counts().sort_index()
-            value_counts.plot(kind='bar', ax=ax, color='#2ca02c')
-            ax.set_ylabel('Количество')
-        
-        ax.set_title(f'Распределение {column_name}')
-        ax.set_xlabel(column_name)
-        plt.xticks(rotation=45)
-        plt.tight_layout()
-        st.pyplot(fig)
-        plt.close()
-    except Exception as e:
-        st.error(f"Не удалось построить график: {str(e)}")
+def analyze_service_ratings(data):
+    """Анализ оценок сервисов"""
+    st.header("Анализ оценок сервисов")
+    
+    service_columns = [
+        'Inflight wifi service',
+        'Departure/Arrival time convenient',
+        'Ease of Online booking',
+        'Gate location',
+        'Food and drink',
+        'Online boarding',
+        'Seat comfort',
+        'Inflight entertainment',
+        'On-board service',
+        'Leg room service',
+        'Baggage handling',
+        'Checkin service',
+        'Inflight service',
+        'Cleanliness'
+    ]
+    
+    # Выбор сервиса для анализа
+    selected_service = st.selectbox("Выберите сервис для анализа", service_columns)
+    
+    # Распределение оценок
+    fig, ax = plt.subplots(figsize=(10, 6))
+    data[selected_service].value_counts().sort_index().plot(kind='bar', color='#1f77b4')
+    plt.title(f"Распределение оценок для {selected_service}")
+    plt.xlabel("Оценка")
+    plt.ylabel("Количество")
+    st.pyplot(fig)
+    plt.close()
+    
+    # Зависимость от типа клиента
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.boxplot(data=data, x='Customer Type', y=selected_service, palette='Set2')
+    plt.title(f"Распределение оценок {selected_service} по типу клиента")
+    st.pyplot(fig)
+    plt.close()
+    
+    # Зависимость от класса обслуживания
+    fig, ax = plt.subplots(figsize=(10, 6))
+    sns.boxplot(data=data, x='Class', y=selected_service, palette='Set3')
+    plt.title(f"Распределение оценок {selected_service} по классу обслуживания")
+    st.pyplot(fig)
+    plt.close()
 
 def main():
-    st.title("📊 Умный анализатор данных")
+    st.title("✈️ Анализатор удовлетворенности авиапассажиров")
     st.markdown("""
     <style>
     .small-font { font-size:12px !important; color:gray; }
     </style>
     """, unsafe_allow_html=True)
     
-    uploaded_file = st.file_uploader("Загрузите ваш CSV файл", type=["csv"])
+    uploaded_file = st.file_uploader("Загрузите ваш Excel файл с данными пассажиров", type=["xlsx", "xls"])
     
     if uploaded_file is not None:
         data = safe_load_data(uploaded_file)
         if data is not None:
             st.success(f"Успешно загружено {len(data)} записей")
             
-            # Анализ доступных столбцов
-            columns_info = find_suitable_columns(data)
+            # Проверка наличия необходимых столбцов
+            required_columns = ['satisfaction', 'Inflight wifi service', 'Customer Type', 'Class']
+            if not all(col in data.columns for col in required_columns):
+                st.error("Файл не содержит всех необходимых столбцов для анализа")
+                st.write("Найдены следующие столбцы:", list(data.columns))
+                return
             
             # Показываем информацию о данных
             with st.expander("🔍 Просмотр данных"):
@@ -89,45 +137,21 @@ def main():
                           unsafe_allow_html=True)
             
             # Основной анализ
-            st.header("Анализ данных")
+            analyze_satisfaction(data)
+            analyze_service_ratings(data)
             
-            # Вариант 1: Нашли идеальный столбец
-            if columns_info['suitable_cols']:
-                best_col = columns_info['suitable_cols'][0]
-                st.info(f"Автоматически выбран столбец для анализа: '{best_col}'")
-                smart_plot(data, best_col)
+            # Дополнительный анализ
+            st.header("Дополнительные метрики")
+            col1, col2 = st.columns(2)
             
-            # Вариант 2: Есть похожие столбцы
-            elif columns_info['possible_scores']:
-                selected_col = st.selectbox(
-                    "Выберите столбец для анализа (автоподбор):",
-                    columns_info['possible_scores']
-                )
-                smart_plot(data, selected_col)
+            with col1:
+                st.metric("Средняя задержка вылета (мин)", round(data['Departure Delay in Minutes'].mean(), 1))
+                st.metric("Средняя задержка прилета (мин)", round(data['Arrival Delay in Minutes'].mean(), 1))
             
-            # Вариант 3: Есть числовые столбцы
-            elif columns_info['numeric_cols']:
-                selected_col = st.selectbox(
-                    "Выберите числовой столбец для анализа:",
-                    columns_info['numeric_cols']
-                )
-                smart_plot(data, selected_col)
-            
-            # Вариант 4: Совсем нет подходящих столбцов
-            else:
-                st.warning("Не найдено подходящих числовых столбцов для анализа")
-                
-                # Пробуем найти хотя бы один анализируемый столбец
-                all_cols = data.columns.tolist()
-                if all_cols:
-                    st.info("Попробуйте проанализировать любой столбец:")
-                    selected_col = st.selectbox("Выберите столбец:", all_cols)
-                    
-                    try:
-                        smart_plot(data, selected_col)
-                    except:
-                        st.error("Не удалось проанализировать выбранный столбец")
-                        st.write("Пример значений:", data[selected_col].head().tolist())
+            with col2:
+                st.metric("Доля лояльных клиентов", 
+                         f"{round(data['Customer Type'].value_counts(normalize=True)['Loyal Customer']*100}%")
+                st.metric("Средний возраст пассажиров", round(data['Age'].mean(), 1))
 
 if __name__ == "__main__":
     main()
