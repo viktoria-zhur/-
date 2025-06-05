@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
-import seaborn as sns
 
 def safe_load_data(uploaded_file):
     """Безопасная загрузка данных из Excel"""
@@ -47,7 +46,7 @@ def analyze_satisfaction(data):
         'Cleanliness'
     ]
     
-    st.subheader("Средние оценки по сервисам в зависимости от удовлетворенности")
+    st.subheader("Средние оценки по сервисам")
     mean_ratings = data.groupby('satisfaction')[service_columns].mean().T
     fig, ax = plt.subplots(figsize=(12, 8))
     mean_ratings.plot(kind='bar', ax=ax, color=['#ff9999','#66b3ff'])
@@ -81,7 +80,6 @@ def analyze_service_ratings(data):
         'Cleanliness'
     ]
     
-    # Выбор сервиса для анализа
     selected_service = st.selectbox("Выберите сервис для анализа", service_columns)
     
     # Распределение оценок
@@ -93,17 +91,19 @@ def analyze_service_ratings(data):
     st.pyplot(fig)
     plt.close()
     
-    # Зависимость от типа клиента
+    # Зависимость от типа клиента (без seaborn)
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=data, x='Customer Type', y=selected_service, palette='Set2')
+    data.boxplot(column=selected_service, by='Customer Type', ax=ax)
     plt.title(f"Распределение оценок {selected_service} по типу клиента")
+    plt.suptitle('')
     st.pyplot(fig)
     plt.close()
     
-    # Зависимость от класса обслуживания
+    # Зависимость от класса обслуживания (без seaborn)
     fig, ax = plt.subplots(figsize=(10, 6))
-    sns.boxplot(data=data, x='Class', y=selected_service, palette='Set3')
+    data.boxplot(column=selected_service, by='Class', ax=ax)
     plt.title(f"Распределение оценок {selected_service} по классу обслуживания")
+    plt.suptitle('')
     st.pyplot(fig)
     plt.close()
 
@@ -115,32 +115,28 @@ def main():
     </style>
     """, unsafe_allow_html=True)
     
-    uploaded_file = st.file_uploader("Загрузите ваш Excel файл с данными пассажиров", type=["xlsx", "xls"])
+    uploaded_file = st.file_uploader("Загрузите ваш Excel файл", type=["xlsx", "xls"])
     
     if uploaded_file is not None:
         data = safe_load_data(uploaded_file)
         if data is not None:
             st.success(f"Успешно загружено {len(data)} записей")
             
-            # Проверка наличия необходимых столбцов
             required_columns = ['satisfaction', 'Inflight wifi service', 'Customer Type', 'Class']
             if not all(col in data.columns for col in required_columns):
-                st.error("Файл не содержит всех необходимых столбцов для анализа")
-                st.write("Найдены следующие столбцы:", list(data.columns))
+                st.error("Файл не содержит всех необходимых столбцов")
+                st.write("Найдены столбцы:", list(data.columns))
                 return
             
-            # Показываем информацию о данных
             with st.expander("🔍 Просмотр данных"):
                 st.write("Первые 5 строк:")
                 st.write(data.head())
                 st.markdown(f'<p class="small-font">Все столбцы: {list(data.columns)}</p>', 
                           unsafe_allow_html=True)
             
-            # Основной анализ
             analyze_satisfaction(data)
             analyze_service_ratings(data)
             
-            # Дополнительный анализ
             st.header("Дополнительные метрики")
             col1, col2 = st.columns(2)
             
