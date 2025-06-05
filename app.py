@@ -149,8 +149,8 @@ def main():
                 st.metric("Средняя задержка прилета (мин)", round(data['Arrival Delay in Minutes'].mean(), 1))
             
             with col2:
-                st.metric("Доля лояльных клиентов", 
-                         f"{round(data['Customer Type'].value_counts(normalize=True)['Loyal Customer']*100}%")
+                loyal_percent = round(data['Customer Type'].value_counts(normalize=True)['Loyal Customer']*100, 1)
+                st.metric("Доля лояльных клиентов", f"{loyal_percent}%")
                 st.metric("Средний возраст пассажиров", round(data['Age'].mean(), 1))
 
 if __name__ == "__main__":
